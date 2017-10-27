@@ -12,7 +12,6 @@ def semi_nmf(x, iter=1000):
 
     Args:
         x: input matrix X
-        int r: dimension of the latent structure embedding in X
         int iter: number of iterations of optimization algorithm
 
     Return:
@@ -20,20 +19,41 @@ def semi_nmf(x, iter=1000):
         g: representation matrix G
     '''
     x = x.numpy()
-    f, gT, p = svd_initialization(x)
-    
+    f, g, p = svd_initialization(x)
+
     for i in range(iter):
 
-        f = np.dot(x, np.dot(gT.T, la.inv(np.dot(gT, gT.T))))
+        f = np.dot(x, np.dot(g, la.pinv(np.dot(g.T, g))))
+        f = np.nan_to_num(f)
+        for j in range(g.shape[0]):
 
-        for j in range(gT.shape[0]):
+            for k in range(g.shape[1]):
 
-            for k in range(gT.shape[1]):
+                g[j,k] = g[j,k] * np.sqrt( ( ( abs(np.dot(x.T, f))[j,k] + np.dot(x.T, f)[j,k] )/2
+                    +  np.dot(g, (abs(np.dot(f.T, f)) - np.dot(f.T, f))/2)[j,k] )
+                    /  ( ( abs(np.dot(x.T, f))[j,k] - np.dot(x.T, f)[j,k] )/2
+                    +  np.dot(g, (abs(np.dot(f.T, f)) + np.dot(f.T, f))/2)[j,k] )  ) # BUG to be fixed
 
-                gT[j,k] = gT[j,k] * np.sqrt( ( ( abs(np.dot(x.T, f))[j,k] + np.dot(x.T, f)[j,k] )/2  +  np.dot(gT.T, (abs(np.dot(f.T, f)) - np.dot(f.T, f))/2)[j,k] )
-                    /  ( ( abs(np.dot(x.T, f))[j,k] - np.dot(x.T, f)[j,k] )/2  +  np.dot(gT.T, (abs(np.dot(f.T, f)) + np.dot(f.T, f))/2)[j,k] )  ) # BUG to be fixed
+        g = np.nan_to_num(g)
 
-    return torch.from_numpy(f), torch.from_numpy(gT.T)
+
+    return torch.from_numpy(f), torch.from_numpy(g)
+
+def convex_nmf(x, iter=1000):
+    '''
+    Convex Nonnegative Matrix Factorization. (enhance sparsity)
+    It returns a feature matrix F and a representation matrix G by minimizing
+    frobenius norm ||X - XWG^T||^2. The only contraint is that elements in G and W have to be positive.
+
+    Args:
+        x: input matrix X
+        int iter: number of iterations of optimization algorithm
+
+    Return:
+        w: feature matrix F
+        g: representation matrix G
+    '''
+
 
 def svd_initialization(x):
     '''
@@ -62,14 +82,17 @@ def svd_initialization(x):
     for i in range(p):
         sigma[i,i] = s[i]
 
-    return abs(U[:, 0:p]), np.dot(sigma, Vh), p
+    return abs(U[:, 0:p]), np.dot(sigma, Vh).T, p
 
 
 #------------------test------------------
 
 def main():
 
-
+    x = torch.randn(10, 10)
+    f, g = semi_nmf(x)
+    print(f, '\n')
+    print(g, '\n')
 
 if __name__ == '__main__':
     main()
