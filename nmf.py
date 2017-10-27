@@ -32,9 +32,10 @@ def semi_nmf(x, iter=1000):
                 g[j,k] = g[j,k] * np.sqrt( ( ( abs(np.dot(x.T, f))[j,k] + np.dot(x.T, f)[j,k] )/2
                     +  np.dot(g, (abs(np.dot(f.T, f)) - np.dot(f.T, f))/2)[j,k] )
                     /  ( ( abs(np.dot(x.T, f))[j,k] - np.dot(x.T, f)[j,k] )/2
-                    +  np.dot(g, (abs(np.dot(f.T, f)) + np.dot(f.T, f))/2)[j,k] )  ) # BUG to be fixed
+                    +  np.dot(g, (abs(np.dot(f.T, f)) + np.dot(f.T, f))/2)[j,k] )  )
 
-        g = np.nan_to_num(g)
+        g = np.nan_to_num(g)    # BUG to be fixed: could be the cause that
+                                # makes some columns of reconstruction matrix X' to be 0
 
 
     return torch.from_numpy(f), torch.from_numpy(g)
