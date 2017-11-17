@@ -6,16 +6,31 @@ from sklearn.decomposition import nmf
 import sys
 
 def semi_nmf(x, iter = 30):
+    '''
+    Semi Nonnegative Matrix Factorization.
+    It returns a feature matrix F and a representation matrix G by minimizing
+    frobenius norm ||X - FG^T||^2. The only contraint is that elements in G to be positive.
+
+    Args:
+        x: input matrix X
+        int iter: number of iterations of optimization algorithm
+
+    Return:
+        f: feature matrix F
+        g: representation matrix G
+    '''
 
     x = x.numpy()   # n * m
     f, g, p = svd_initialization(x)
 
+    if  < 2:
+        raise ValueError("The number of components (r) has to be >=2.")
+
+
     for i in range(iter):
-        try:
-            f = np.dot(x, np.dot(g, la.pinv(np.dot(g.T, g))))
-        except ValueError:
-            print(i, '\n')
-            print(g)
+
+        f = np.dot(x, np.dot(g, la.pinv(np.dot(g.T, g))))
+
         f = np.nan_to_num(f)
 
         Ap = (abs(np.dot(x.T, f)) + np.dot(x.T, f))/2   #m * r
@@ -82,6 +97,39 @@ def svd_initialization(x):
         sigma[i,i] = s[i]
 
     return abs(U[:, 0:p]), np.dot(sigma, Vh).T, p
+
+def appr_seminmf(M, r):
+
+
+    if r < 2:
+        raise ValueError("The number of components (r) has to be >=2.")
+
+    A, S, B = svds(M, r-1)
+    S = np.diag(S)
+    A = np.dot(A, S)
+
+    m, n = M.shape
+
+    for i in range(r-1):
+        if B[i, :].min() < (-B[i, :]).min():
+            B[i, :] = -B[i, :]
+            A[:, i] = -A[:, i]
+
+
+    if r == 2:
+        U = np.concatenate([A, -A], axis=1)
+    else:
+        An = -np.sum(A, 1).reshape(A.shape[0], 1)
+        U = np.concatenate([A, An], 1)
+
+    V = np.concatenate([B, np.zeros((1, n))], 0)
+
+    if r>=3:
+        V -= np.minimum(0, B.min(0))
+    else:
+        V -= np.minimum(0, B)
+
+    return U, V
 
 
 # solve NMF by hierarchical alternating least squares, returns the approximation matrices and the residue
@@ -214,7 +262,7 @@ def test1():
     print('re_x3: ', '\n', torch.from_numpy(re_x3))
 
 def test2():
-    x = torch.randn(4,4).numpy()
+    # x = torch.randn(4,4).numpy()
     # f, g, p = svd_initialization(x)
     #
     # Ap = (abs(np.dot(x.T, f)) + np.dot(x.T, f))/2   #m * r
@@ -228,7 +276,7 @@ def test2():
     #     for k in range(g.shape[1]):
     #         g[j, k] = g[j, k] * np.sqrt( (Ap+Bn)[j,k]/C[j,k] )
 
-    y = torch.randn(40,40)
+    y = torch.randn(10,10)
     f, g = semi_nmf(y,20)
     re_y = torch.from_numpy(np.dot(f.numpy(), g.numpy().T))
     torch.set_printoptions(threshold=sys.maxsize)
