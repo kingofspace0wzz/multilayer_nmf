@@ -5,7 +5,7 @@ from torch.autograd import Variable
 from sklearn.decomposition import nmf
 import sys
 
-def semi_nmf(x, iter = 30):
+def semi_nmf(x, iter=30, init='svd', p=0):
     '''
     Semi Nonnegative Matrix Factorization.
     It returns a feature matrix F and a representation matrix G by minimizing
@@ -20,38 +20,105 @@ def semi_nmf(x, iter = 30):
         g: representation matrix G
     '''
 
-    x = x.numpy()   # n * m
-    f, g, p = svd_initialization(x)
+    # x = x.numpy()   # n * m
+    # f, g, p = svd_initialization(x)
+    #
+    # if  < 2:
+    #     raise ValueError("The number of components (r) has to be >=2.")
+    #
+    #
+    # for i in range(iter):
+    #
+    #     f = np.dot(x, np.dot(g, la.pinv(np.dot(g.T, g))))
+    #
+    #     f = np.nan_to_num(f)
+    #
+    #     Ap = (abs(np.dot(x.T, f)) + np.dot(x.T, f))/2   #m * r
+    #     An = (abs(np.dot(x.T, f)) - np.dot(x.T, f))/2
+    #     Bp = (abs(np.dot(g, np.dot(f.T, f))) + np.dot(g, np.dot(f.T, f)))/2
+    #     Bn = (abs(np.dot(g, np.dot(f.T, f))) - np.dot(g, np.dot(f.T, f)))/2
+    #
+    #     C = An + Bp
+    #     for m in range(C.shape[0]):
+    #         for n in range(C.shape[1]):
+    #             if C[m, n] is 0:
+    #                 C[m, n] += 0.0001
+    #
+    #     for j in range(g.shape[0]):
+    #         for k in range(g.shape[1]):
+    #             g[j, k] = g[j, k] * np.sqrt( (Ap+Bn)[j,k]/(An+Bp)[j,k] )
+    #
+    # g = np.nan_to_num(g)
+    #
+    # return torch.from_numpy(f), torch.from_numpy(g)
+    if init is 'svd':
+        f, g, p = svd_initialization(x)
 
-    if  < 2:
-        raise ValueError("The number of components (r) has to be >=2.")
+        if p < 2:
+            raise ValueError("The number of components (r) has to be >=2.")
 
+        x = x.cuda()
+        for i in range(iter):
 
-    for i in range(iter):
+            f = torch.mm(x, torch.mm(g, torch.inverse(torch.mm(torch.t(g), g))))
 
-        f = np.dot(x, np.dot(g, la.pinv(np.dot(g.T, g))))
+            Ap = (torch.abs(torch.mm(torch.t(x), f)) + torch.mm(torch.t(x), f))/2   #m * r
+            An = (torch.abs(torch.mm(torch.t(x), f)) - torch.mm(torch.t(x), f))/2
+            Bp = (torch.abs(torch.mm(g, torch.mm(torch.t(f), f))) + torch.mm(g, torch.mm(torch.t(f), f)))/2
+            Bn = (torch.abs(torch.mm(g, torch.mm(torch.t(f), f))) - torch.mm(g, torch.mm(torch.t(f), f)))/2
 
-        f = np.nan_to_num(f)
+            C = An + Bp
 
-        Ap = (abs(np.dot(x.T, f)) + np.dot(x.T, f))/2   #m * r
-        An = (abs(np.dot(x.T, f)) - np.dot(x.T, f))/2
-        Bp = (abs(np.dot(g, np.dot(f.T, f))) + np.dot(g, np.dot(f.T, f)))/2
-        Bn = (abs(np.dot(g, np.dot(f.T, f))) - np.dot(g, np.dot(f.T, f)))/2
+            for m in range(C.size()[0]):
+                for n in range(C.size()[1]):
+                    if C[m, n] is 0:
+                        C[m, n] += 0.0001
 
-        C = An + Bp
-        for m in range(C.shape[0]):
-            for n in range(C.shape[1]):
-                if C[m, n] is 0:
-                    C[m, n] += 0.0001
+            for j in range(g.size()[0]):
+                for k in range(g.size()[1]):
+                    if ((An+Bp)[j,k] == 0):
+                        g[j,k] = 0.5
 
-        for j in range(g.shape[0]):
-            for k in range(g.shape[1]):
-                g[j, k] = g[j, k] * np.sqrt( (Ap+Bn)[j,k]/(An+Bp)[j,k] )
+                    else:
+                        # print((An+Bp)[j,k], 'i=', i, 'j=', j, 'k=', k)
+                        g[j, k] = g[j, k] * np.sqrt( (Ap+Bn)[j,k]/(An+Bp)[j,k] )
 
-    g = np.nan_to_num(g)
+        return f, g
+    else:
+        if p == 0:
+            p = x.size()[1] - 2
+        if p < 2:
+            raise ValueError("The number of components (r) has to be >=2.")
+        f = torch.randn(x.size()[0], p).cuda()
+        g = torch.randn(x.size()[1], p).cuda()
 
-    return torch.from_numpy(f), torch.from_numpy(g)
+        x = x.cuda()
+        for i in range(iter):
 
+            f = torch.mm(x, torch.mm(g, torch.inverse(torch.mm(torch.t(g), g))))
+
+            Ap = (torch.abs(torch.mm(torch.t(x), f)) + torch.mm(torch.t(x), f))/2   #m * r
+            An = (torch.abs(torch.mm(torch.t(x), f)) - torch.mm(torch.t(x), f))/2
+            Bp = (torch.abs(torch.mm(g, torch.mm(torch.t(f), f))) + torch.mm(g, torch.mm(torch.t(f), f)))/2
+            Bn = (torch.abs(torch.mm(g, torch.mm(torch.t(f), f))) - torch.mm(g, torch.mm(torch.t(f), f)))/2
+
+            C = An + Bp
+
+            for m in range(C.size()[0]):
+                for n in range(C.size()[1]):
+                    if C[m, n] is 0:
+                        C[m, n] += 0.0001
+
+            for j in range(g.size()[0]):
+                for k in range(g.size()[1]):
+                    if ((An+Bp)[j,k] == 0):
+                        g[j,k] = 0
+                        print('ZEROS!!!')
+                    else:
+                        print((An+Bp)[j,k], 'i=', i, 'j=', j, 'k=', k)
+                        g[j, k] = g[j, k] * np.sqrt( (Ap+Bn)[j,k]/(An+Bp)[j,k] )
+
+        return f, g
 
 def convex_nmf(x, iter=1000):
     '''
@@ -81,8 +148,24 @@ def svd_initialization(x):
         G: initialized representation matrix
         p: rank of Factorization
     '''
+    # p, sum_p = 0, 0
+    # U, s, Vh = la.svd(x)
+    # sum_r = sum(s)
+    #
+    # for i in range(len(s)):
+    #
+    #     if sum_p/sum_r < 0.9:
+    #         sum_p = sum_p + s[i]
+    #         p+=1
+    #
+    # sigma = np.zeros((p, x.shape[1]))
+    #
+    # for i in range(p):
+    #     sigma[i,i] = s[i]
+    #
+    # return abs(U[:, 0:p]), np.dot(sigma, Vh).T, p
     p, sum_p = 0, 0
-    U, s, Vh = la.svd(x)
+    U, s, V = torch.svd(x)
     sum_r = sum(s)
 
     for i in range(len(s)):
@@ -91,12 +174,12 @@ def svd_initialization(x):
             sum_p = sum_p + s[i]
             p+=1
 
-    sigma = np.zeros((p, x.shape[1]))
+    sigma = torch.zeros(p, x.size()[1])
 
     for i in range(p):
         sigma[i,i] = s[i]
 
-    return abs(U[:, 0:p]), np.dot(sigma, Vh).T, p
+    return torch.abs(U[:, 0:p]).cuda(), torch.t(torch.mm(sigma, torch.t(V))).cuda(), p
 
 def appr_seminmf(M, r):
 
@@ -276,14 +359,22 @@ def test2():
     #     for k in range(g.shape[1]):
     #         g[j, k] = g[j, k] * np.sqrt( (Ap+Bn)[j,k]/C[j,k] )
 
-    y = torch.randn(10,10)
-    f, g = semi_nmf(y,20)
-    re_y = torch.from_numpy(np.dot(f.numpy(), g.numpy().T))
+
+    # y = torch.randn(10,10)
+    # f, g = semi_nmf(y,20)
+    # re_y = torch.from_numpy(np.dot(f.numpy(), g.numpy().T))
+    # torch.set_printoptions(threshold=sys.maxsize)
+    # print('Y: ', '\n', y,'\n')
+    # print('re_y', '\n', re_y, '\n')
+    # print('f', '\n', f, '\n', 'g', '\n', g)
+
+    y = torch.randn(20,20)
+    f, g = semi_nmf(y,40, init='r')
+    re_y = torch.mm(f, torch.t(g))
     torch.set_printoptions(threshold=sys.maxsize)
     print('Y: ', '\n', y,'\n')
     print('re_y', '\n', re_y, '\n')
     print('f', '\n', f, '\n', 'g', '\n', g)
-
 
 def main():
 
